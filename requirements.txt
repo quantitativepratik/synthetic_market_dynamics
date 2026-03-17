@@ -1,0 +1,8 @@
+numpy>=1.24
+pandas>=1.5
+matplotlib>=3.6
+seaborn>=0.12
+scipy>=1.10
+scikit-learn>=1.2
+# arch>=5.3  # for production EGARCH/GARCH — install via: pip install arch
+# statsmodels>=0.14  # alternative ARIMA — install via: pip install statsmodels
