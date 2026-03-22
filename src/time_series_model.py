@@ -1,16 +1,3 @@
-"""
-time_series_model.py
---------------------
-ARIMA + EGARCH implementation for price and volatility forecasting.
-
-ARIMA handles the mean equation (trend/autocorrelation in returns),
-while EGARCH captures the volatility clustering and the asymmetric
-response to shocks — bad news tends to spike vol harder than good news.
-
-We implement both from scratch using scipy so there are zero
-external dependencies beyond the scientific Python stack.
-"""
-
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
@@ -19,10 +6,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-# ─────────────────────────────────────────────
-# Data generation — synthetic price series
-# ─────────────────────────────────────────────
-
+#price generation
 def generate_price_series(n=1000, seed=42):
     """
     Build a synthetic log-return series that mimics real equity behavior:
@@ -32,34 +16,34 @@ def generate_price_series(n=1000, seed=42):
     """
     rng = np.random.default_rng(seed)
     
-    # True EGARCH(1,1) parameters we'll try to recover
-    omega = -0.15   # log-variance intercept
-    alpha = 0.12    # ARCH effect (magnitude of shock)
-    gamma = 0.644   # leverage / asymmetry (negative shocks → bigger vol)
-    beta  = 0.97    # persistence (vol decays slowly)
+    #true EGARCH(1,1) parameters we'll try to recover
+    omega = -0.15
+    alpha = 0.12
+    gamma = 0.644
+    beta  = 0.97
     
     log_var = np.zeros(n)
     returns = np.zeros(n)
     
-    # Burn-in to stabilize the process
+    #burn-in to stabilize the process
     log_var[0] = omega / (1 - beta)
     
     for t in range(1, n):
         sigma_prev = np.exp(0.5 * log_var[t-1])
         z_prev = returns[t-1] / (sigma_prev + 1e-10)
         
-        # Nelson's EGARCH recursion
+        #nelson's EGARCH recursion
         log_var[t] = (omega
                       + alpha * (np.abs(z_prev) - np.sqrt(2 / np.pi))
                       + gamma * z_prev
                       + beta * log_var[t-1])
     
-    # Draw shocks — t(6) gives fatter tails than Gaussian
+
     df_shock = 6
     raw_shocks = rng.standard_t(df_shock, size=n) / np.sqrt(df_shock / (df_shock - 2))
     returns = np.exp(0.5 * log_var) * raw_shocks
     
-    # Reconstruct price from log-returns
+    
     log_price = np.cumsum(returns) + np.log(100)
     prices = np.exp(log_price)
     
@@ -73,18 +57,9 @@ def generate_price_series(n=1000, seed=42):
     return df
 
 
-# ─────────────────────────────────────────────
-# ARIMA(p,d,q) — mean equation
-# ─────────────────────────────────────────────
-
+#arima
 class ARIMA:
-    """
-    Minimal ARIMA implementation.
-    For our use case the mean equation is ARIMA(0,0,0) — basically
-    just a drift term — since log-returns are very close to white noise.
-    We keep the general structure so you can swap in (p,d,q) if needed.
-    """
-    
+   
     def __init__(self, p=0, d=0, q=0):
         self.p = p
         self.d = d
@@ -101,16 +76,13 @@ class ARIMA:
         y_diff = self._difference(np.array(y), self.d)
         n = len(y_diff)
         
-        # With p=q=0 we just estimate the mean (drift)
+        #with p=q=0 we just estimate the mean (drift)
         if self.p == 0 and self.q == 0:
             mu = np.mean(y_diff)
             self.params = {"mu": mu}
             self.residuals = y_diff - mu
-            self.fitted_mean = y_diff  # trivially, just the mean level
+            self.fitted_mean = y_diff
             return self
-        
-        # General case: AR(p) via OLS
-        # (MA terms omitted for brevity — extend if you need them)
         X = []
         Y = y_diff[self.p:]
         for i in range(self.p):
@@ -132,10 +104,7 @@ class ARIMA:
         return np.full(steps, mu)
 
 
-# ─────────────────────────────────────────────
-# EGARCH(1,1) — volatility equation
-# ─────────────────────────────────────────────
-
+# egarch
 class EGARCH:
     """
     Nelson (1991) EGARCH(1,1) with Gaussian innovations.
@@ -158,7 +127,7 @@ class EGARCH:
         n = len(returns)
         log_var = np.zeros(n)
         
-        # Start variance at the unconditional level
+        # variance at the unconditional level
         log_var[0] = omega / max(1 - abs(beta), 1e-6)
         
         ll = 0.0
@@ -235,7 +204,7 @@ class EGARCH:
             "beta":  beta
         }
         
-        # Store the fitted variance path for diagnostics
+        #store the fitted variance path for diagnostics
         self.log_var_path = self._compute_log_var(returns, best_result.x)
         self.fitted_vol = np.exp(0.5 * self.log_var_path)
         return self
@@ -284,11 +253,7 @@ class EGARCH:
         forecast_vol = np.exp(0.5 * forecast_log_var)
         return forecast_vol
 
-
-# ─────────────────────────────────────────────
-# Risk metrics: VaR and CVaR
-# ─────────────────────────────────────────────
-
+#compute
 def compute_var_cvar(returns, confidence=0.95):
     """
     Historical simulation VaR and CVaR at the given confidence level.
@@ -306,11 +271,7 @@ def compute_var_cvar(returns, confidence=0.95):
     
     return var, cvar
 
-
-# ─────────────────────────────────────────────
-# 30-day price forecast
-# ─────────────────────────────────────────────
-
+#forecast
 def forecast_prices(df, arima_model, egarch_model, steps=30, n_simulations=500, seed=1):
     """
     Monte Carlo price paths using ARIMA for drift and EGARCH for vol.
@@ -352,17 +313,17 @@ def forecast_prices(df, arima_model, egarch_model, steps=30, n_simulations=500, 
 if __name__ == "__main__":
     print("Running time series pipeline...\n")
     
-    # Step 1: generate data
+    #generating data
     df = generate_price_series(n=1000)
     print(f"Generated {len(df)} trading days of synthetic price data")
     print(f"Price range: {df['price'].min():.2f} – {df['price'].max():.2f}")
     
-    # Step 2: fit ARIMA (mean equation)
+    #fit ARIMA (mean equation)
     arima = ARIMA(p=0, d=0, q=0)
     arima.fit(df["log_ret"])
     print(f"\nARIMA(0,0,0) drift: {arima.params['mu']:.6f}")
     
-    # Step 3: fit EGARCH
+    #fit EGARCH
     egarch = EGARCH()
     egarch.fit(df["log_ret"].values)
     p = egarch.params
@@ -373,13 +334,13 @@ if __name__ == "__main__":
     print(f"  β (beta):  {p['beta']:.4f}   ← persistence")
     print(f"  Converged: {egarch.converged}")
     
-    # Step 4: VaR / CVaR
+    # VaR / CVaR
     var, cvar = compute_var_cvar(df["log_ret"].values)
     print(f"\nRisk metrics (95% confidence, historical simulation):")
     print(f"  VaR:  {var*100:.2f}%")
     print(f"  CVaR: {cvar*100:.2f}%")
     
-    # Step 5: 30-day forecast
+    #30-day forecast
     fc = forecast_prices(df, arima, egarch, steps=30)
     print(f"\n30-day forecast:")
     print(f"  Mean forecast vol (sigma): {fc['mean_vol']:.4f}")
