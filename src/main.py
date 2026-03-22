@@ -1,26 +1,8 @@
-"""
-main.py
--------
-End-to-end pipeline runner for Synthetic Market Dynamics.
-
-Run this file and it will:
-  1. Generate synthetic price series and fit EGARCH + ARIMA
-  2. Compute VaR / CVaR
-  3. Produce 30-day Monte Carlo price forecasts
-  4. Simulate 5 million synthetic HFT trades
-  5. Bin into 30-min windows and cluster
-  6. Save all figures to outputs/
-
-Takes about 2–3 minutes on a modern laptop — most of the time is
-the 5M-trade simulation and the EGARCH MLE optimization.
-"""
 
 import os
 import time
 import numpy as np
 import pandas as pd
-
-# make sure we can import our modules from wherever this is run
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -58,9 +40,7 @@ def main():
     
     total_start = time.time()
     
-    # ─────────────────────────────────────────
-    # PART 1: Time Series Analysis
-    # ─────────────────────────────────────────
+    # time series analysis
     banner("PART 1 — Time Series: ARIMA + EGARCH")
     
     print("\n[1/6] Generating synthetic price series (1000 days)...")
@@ -103,9 +83,7 @@ def main():
     plot_forecast(df, fc)
     plot_risk_metrics(df["log_ret"].values, var, cvar)
     
-    # ─────────────────────────────────────────
-    # PART 2: HFT Market Simulation
-    # ─────────────────────────────────────────
+    # hft simulation
     banner("PART 2 — HFT Synthetic Market Simulation")
     
     print("\n[6/6] Running 5-million-trade simulation...")
@@ -117,14 +95,14 @@ def main():
     total_pnl = trades["pnl"].sum()
     print(f"      Total P&L: {total_pnl:,.0f} units ({total_pnl/1e6:.1f}M)")
     
-    # Binning
+    # binning
     print("\n  Binning into 30-minute windows...")
     binned = bin_to_30min(trades)
     print(f"      Total 30-min bins: {len(binned):,}")
     print(f"      Max bin volume:    {binned['volume'].max():,}")
     print(f"      Avg bin volume:    {binned['volume'].mean():,.0f}")
     
-    # Clustering
+    #clustering
     print("\n  Fitting k-means (6 clusters)...")
     binned_cl, cluster_summary, km, scaler = cluster_bins(binned, n_clusters=6)
     
@@ -133,7 +111,7 @@ def main():
     available = [c for c in display_cols if c in cluster_summary.columns]
     print(cluster_summary[available].to_string(index=False))
     
-    # Strategy breakdown
+    #strategy
     print("\n  Strategy P&L breakdown:")
     pnl_by_strat = trades.groupby("strategy")["pnl"].sum()
     for strat, pnl in pnl_by_strat.items():
@@ -147,9 +125,7 @@ def main():
     plot_clusters(binned_cl, cluster_summary)
     plot_pnl_attribution(trades)
     
-    # ─────────────────────────────────────────
-    # Summary
-    # ─────────────────────────────────────────
+    #summary
     banner("RESULTS SUMMARY")
     
     total_elapsed = time.time() - total_start
